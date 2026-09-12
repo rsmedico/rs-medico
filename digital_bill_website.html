@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>R.S. Medico - Digital Bill</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f2f4f7;font-family:Arial,sans-serif;color:#222}
+.wrap{max-width:1100px;margin:20px auto;padding:12px}
+.card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 3px 15px #0001}
+h1{margin:0 0 5px;font-size:25px}h2{font-size:18px;margin:22px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+label{font-size:12px;font-weight:bold;display:block;margin-bottom:4px}
+input{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font-size:14px}
+.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:950px}
+th,td{border:1px solid #ccc;padding:6px;font-size:12px}th{background:#f0f2f5}
+td input{border:0;padding:6px;border-radius:0;min-width:60px}
+button{border:0;border-radius:9px;padding:10px 15px;font-weight:bold;cursor:pointer;margin:5px 4px 0 0}
+.add{background:#e9eefc}.print{background:#222;color:#fff}.wa{background:#20b858;color:#fff}.danger{background:#ffe5e5;color:#b00000}
+.totals{margin-left:auto;max-width:330px;margin-top:15px}.row{display:flex;justify-content:space-between;padding:6px 0}
+.grand{font-size:19px;font-weight:bold;border-top:2px solid #222;margin-top:5px;padding-top:10px}
+.note{font-size:12px;color:#666;margin-top:12px}
+.bill-preview{display:none}
+@media(max-width:700px){.grid{grid-template-columns:1fr 1fr}.wrap{margin:5px;padding:5px}}
+@media print{
+ body{background:#fff}.wrap{max-width:none;margin:0;padding:0}.card{box-shadow:none;padding:5px}
+ .no-print{display:none!important}.table-wrap{overflow:visible}table{min-width:0}
+ input{border:0;padding:3px}.card{border:0}h1{font-size:22px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="card">
+<div class="no-print">
+<h1>Digital Bill Generator</h1>
+<p style="margin-top:0;color:#666">R.S. MEDICO • First working version</p>
+</div>
+
+<div class="grid">
+<div><label>Shop / Company Name</label><input id="shop" value="R.S. MEDICO"></div>
+<div><label>Place / Address</label><input id="address" value="Yeola, Tal. Yeola, Dist. Nashik"></div>
+<div><label>Invoice No.</label><input id="invoice" value="001"></div>
+<div><label>Bill To / Customer</label><input id="customer" placeholder="Customer name"></div>
+<div><label>Customer Mobile</label><input id="mobile" placeholder="Mobile number"></div>
+<div><label>Date</label><input id="date" type="date"></div>
+<div><label>D.L. No.</label><input id="dl" placeholder="Drug Licence No."></div>
+<div><label>PAN No.</label><input id="pan" placeholder="PAN (optional)"></div>
+<div><label>Payment Mode</label><input id="payment" value="Cash"></div>
+</div>
+
+<h2>Products</h2>
+<div class="table-wrap">
+<table id="items">
+<thead><tr>
+<th>MKT</th><th>HSN</th><th>Product Name</th><th>Pack</th><th>Qty</th><th>Batch</th><th>Exp.</th><th>MRP</th><th>Rate</th><th>Disc %</th><th>GST %</th><th>Amount</th><th class="no-print">×</th>
+</tr></thead>
+<tbody></tbody>
+</table>
+</div>
+<div class="no-print">
+<button class="add" onclick="addRow()">+ Add Product</button>
+<button class="print" onclick="window.print()">🖨 Print / Save PDF</button>
+<button class="wa" onclick="shareWhatsApp()">🟢 WhatsApp</button>
+</div>
+
+<div class="totals">
+<div class="row"><span>Subtotal</span><b id="subtotal">₹0.00</b></div>
+<div class="row"><span>Discount</span><b id="discount">₹0.00</b></div>
+<div class="row"><span>GST</span><b id="gst">₹0.00</b></div>
+<div class="row grand"><span>NET PAYABLE</span><b id="total">₹0.00</b></div>
+</div>
+<p class="note">Prototype only. For real pharmacy invoicing, verify GST, HSN, licence details, tax rules and invoice compliance before using commercially.</p>
+</div>
+</div>
+
+<script>
+const dateEl=document.getElementById('date');
+dateEl.value=new Date().toISOString().slice(0,10);
+
+function addRow(data={}){
+ const tr=document.createElement('tr');
+ const fields=['mkt','hsn','name','pack','qty','batch','exp','mrp','rate','disc','gst'];
+ tr.innerHTML=fields.map((f,i)=>`<td><input class="${f}" type="${['qty','mrp','rate','disc','gst'].includes(f)?'number':'text'}" ${['qty','mrp','rate','disc','gst'].includes(f)?'step="0.01"':''} value="${data[f]??(f==='qty'?1:f==='gst'?0:'')}"></td>`).join('')
+ + `<td class="amount">₹0.00</td><td class="no-print"><button class="danger" onclick="this.closest('tr').remove();calc()">Delete</button></td>`;
+ document.querySelector('#items tbody').appendChild(tr);
+ tr.querySelectorAll('input').forEach(x=>x.addEventListener('input',calc));
+ calc();
+}
+function money(n){return '₹'+Number(n||0).toFixed(2)}
+function calc(){
+ let subtotal=0, discount=0, gst=0;
+ document.querySelectorAll('#items tbody tr').forEach(tr=>{
+   const qty=+tr.querySelector('.qty').value||0;
+   const rate=+tr.querySelector('.rate').value||0;
+   const d=+tr.querySelector('.disc').value||0;
+   const g=+tr.querySelector('.gst').value||0;
+   const base=qty*rate;
+   const discAmt=base*d/100;
+   const taxable=base-discAmt;
+   const gstAmt=taxable*g/100;
+   const amount=taxable+gstAmt;
+   subtotal+=base; discount+=discAmt; gst+=gstAmt;
+   tr.querySelector('.amount').textContent=money(amount);
+ });
+ document.getElementById('subtotal').textContent=money(subtotal);
+ document.getElementById('discount').textContent=money(discount);
+ document.getElementById('gst').textContent=money(gst);
+ document.getElementById('total').textContent=money(subtotal-discount+gst);
+}
+function shareWhatsApp(){
+ const customer=document.getElementById('customer').value||'Customer';
+ const inv=document.getElementById('invoice').value||'';
+ const total=document.getElementById('total').textContent;
+ const shop=document.getElementById('shop').value||'R.S. MEDICO';
+ const msg=`${shop}%0AInvoice No: ${inv}%0ACustomer: ${customer}%0ANet Payable: ${total}%0A%0AThank you!`;
+ const mobile=document.getElementById('mobile').value.replace(/\D/g,'');
+ const url=mobile.length>=10 ? `https://wa.me/91${mobile}?text=${msg}` : `https://wa.me/?text=${msg}`;
+ window.open(url,'_blank');
+}
+addRow();
+</script>
+</body>
+</html>
